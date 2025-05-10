@@ -89,5 +89,5 @@ if uploaded_file:
 else:
     st.info("Please upload an image file to begin classification.")
 
-# Footer
+# Footer .................
 st.markdown("<hr><center>Developed by <b>Md. Shihab Shorkar</b> | Powered by EfficientNetV2B0</center>", unsafe_allow_html=True)

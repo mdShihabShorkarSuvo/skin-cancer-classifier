@@ -1,27 +1,62 @@
 import streamlit as st
-from PIL import Image
+import tensorflow as tf
 import numpy as np
-from utils import load_model, preprocess_image, CLASS_NAMES
+from PIL import Image
+import requests
+import os
 
-st.set_page_config(page_title="Skin Cancer Classifier", layout="centered")
+# Class labels
+CLASS_NAMES = {
+    0: "Basal Cell Carcinoma (BCC)",
+    1: "Benign Keratosis-like Lesions (BKL)",
+    2: "Dermatofibroma (DF)",
+    3: "Melanoma (MEL)",
+    4: "Melanocytic Nevi (NV)",
+    5: "Others"
+}
 
-st.title("🔬 Skin Cancer Classification App")
-st.write("Upload a dermoscopic image. The app will predict one of 6 skin cancer categories.")
+# Model path - It will be downloaded from GitHub automatically
+MODEL_PATH = "model/EfficientNetV2B0_Light_Image_Split.h5"
 
-# Load model (download if not already present)
-model = load_model()
+# Load model from path or GitHub if not found locally
+@st.cache_resource
+def load_model(path=MODEL_PATH):
+    return tf.keras.models.load_model(path)
 
-uploaded_file = st.file_uploader("Choose an image", type=["jpg", "jpeg", "png"])
+# Preprocessing function
+def preprocess_image(image: Image.Image):
+    image = image.resize((224, 224))
+    img_array = np.array(image)
 
-if uploaded_file:
+    # Remove alpha channel if it exists
+    if img_array.shape[-1] == 4:
+        img_array = img_array[..., :3]
+
+    img_array = img_array / 255.0
+    return np.expand_dims(img_array, axis=0)
+
+# App interface
+st.title("Skin Cancer Classification")
+st.write("Upload an image of a skin lesion and the model will predict the type of skin cancer.")
+
+# Upload image
+uploaded_file = st.file_uploader("Choose an image...", type="jpg")
+
+if uploaded_file is not None:
     image = Image.open(uploaded_file)
     st.image(image, caption="Uploaded Image", use_column_width=True)
 
-    with st.spinner("Classifying..."):
-        processed = preprocess_image(image)
-        prediction = model.predict(processed)
-        class_id = np.argmax(prediction)
-        confidence = np.max(prediction)
+    # Load model
+    model = load_model()
 
-    st.success(f"Prediction: **{CLASS_NAMES[class_id]}**")
-    st.info(f"Confidence: **{confidence:.2%}**")
+    # Preprocess image
+    image_array = preprocess_image(image)
+
+    # Make prediction
+    prediction = model.predict(image_array)
+    predicted_class = np.argmax(prediction, axis=1)[0]
+    confidence = np.max(prediction, axis=1)[0]
+
+    # Show results
+    st.write(f"Prediction: {CLASS_NAMES[predicted_class]}")
+    st.write(f"Confidence: {confidence * 100:.2f}%")

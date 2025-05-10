@@ -2,8 +2,8 @@ import streamlit as st
 import tensorflow as tf
 import numpy as np
 from PIL import Image
-import requests
 import os
+import requests
 
 # Class labels
 CLASS_NAMES = {
@@ -17,11 +17,27 @@ CLASS_NAMES = {
 
 # Model path - It will be downloaded from GitHub automatically
 MODEL_PATH = "model/EfficientNetV2B0_Light_Image_Split.h5"
+MODEL_URL = "https://github.com/mdShihabShorkarSuvo/skin-cancer-classifier/raw/main/model/EfficientNetV2B0_Light_Image_Split.h5"
 
 # Load model from path or GitHub if not found locally
 @st.cache_resource
 def load_model(path=MODEL_PATH):
+    if not os.path.exists(path):
+        st.write("Model not found locally. Downloading model...")
+        download_model(path)
     return tf.keras.models.load_model(path)
+
+# Function to download the model from GitHub
+def download_model(path):
+    try:
+        # Download the model from the GitHub repository
+        r = requests.get(MODEL_URL)
+        r.raise_for_status()  # Raise an error if the download fails
+        with open(path, "wb") as f:
+            f.write(r.content)
+        st.success("Model downloaded successfully!")
+    except requests.exceptions.RequestException as e:
+        st.error(f"Error downloading model: {e}")
 
 # Preprocessing function
 def preprocess_image(image: Image.Image):
@@ -46,16 +62,21 @@ if uploaded_file is not None:
     st.image(image, caption="Uploaded Image", use_column_width=True)
 
     # Load model
-    model = load_model()
+    try:
+        model = load_model()
+    except Exception as e:
+        st.error(f"Error loading model: {e}")
+        model = None
 
-    # Preprocess image
-    image_array = preprocess_image(image)
+    if model is not None:
+        # Preprocess image
+        image_array = preprocess_image(image)
 
-    # Make prediction
-    prediction = model.predict(image_array)
-    predicted_class = np.argmax(prediction, axis=1)[0]
-    confidence = np.max(prediction, axis=1)[0]
+        # Make prediction
+        prediction = model.predict(image_array)
+        predicted_class = np.argmax(prediction, axis=1)[0]
+        confidence = np.max(prediction, axis=1)[0]
 
-    # Show results
-    st.write(f"Prediction: {CLASS_NAMES[predicted_class]}")
-    st.write(f"Confidence: {confidence * 100:.2f}%")
+        # Show results
+        st.write(f"Prediction: {CLASS_NAMES[predicted_class]}")
+        st.write(f"Confidence: {confidence * 100:.2f}%")

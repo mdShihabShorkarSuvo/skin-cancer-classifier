@@ -1,5 +1,7 @@
-streamlit
-numpy
-pillow
-tensorflow
-gdown
+streamlit==1.17.0
+tensorflow==2.12.0  # or any specific version you used for training
+git+https://github.com/git-lfs/git-lfs.git
+Pillow==9.2.0  # For image processing (if needed)
+numpy==1.23.0   # Ensure compatibility with TensorFlow
+pandas==1.5.0  # If you're using pandas in your project
+scikit-learn==1.1.2  # If using for model evaluation or data processing

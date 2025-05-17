@@ -23,7 +23,7 @@ CLASS_NAMES = {
 MODEL_PATH = "model/EfficientNetV2B0_Light_Image_Split.h5"
 MODEL_URL = "https://github.com/mdShihabShorkarSuvo/skin-cancer-classifier/raw/main/model/EfficientNetV2B0_Light_Image_Split.h5"
 
-# Function to download the model from GitHub
+# Download the model if not available
 def download_model(path):
     try:
         with st.spinner("Downloading model..."):
@@ -36,27 +36,32 @@ def download_model(path):
     except requests.exceptions.RequestException as e:
         st.error(f"Error downloading model: {e}")
 
-# Load the model (cached for efficiency)
+# Load the model with caching
 @st.cache_resource
 def load_model(path=MODEL_PATH):
     if not os.path.exists(path):
         download_model(path)
     return tf.keras.models.load_model(path)
 
-# Image preprocessing
+# Preprocess the uploaded image
 def preprocess_image(image: Image.Image):
     image = image.resize((224, 224))
     img_array = np.array(image)
-    if img_array.shape[-1] == 4:  # Remove alpha if present
+    if img_array.shape[-1] == 4:  # Remove alpha channel if present
         img_array = img_array[..., :3]
     img_array = img_array / 255.0
     return np.expand_dims(img_array, axis=0)
+
+# Validate if the uploaded image looks like a real skin lesion
+def is_skin_like_image(image_array):
+    std_dev = np.std(image_array)
+    return std_dev > 0.05  # Adjust threshold based on testing
 
 # --- UI Layout ---
 st.markdown("<h1 style='text-align: center; color: #4CAF50;'>🧬 Skin Cancer Classification</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center;'>Upload a skin lesion image to classify the type of skin cancer.</p>", unsafe_allow_html=True)
 
-# File uploader
+# Upload image
 uploaded_file = st.file_uploader("Upload a skin lesion image (JPG/PNG/GIF/BMP)", type=["jpg", "png", "gif", "bmp"])
 
 if uploaded_file:
@@ -67,6 +72,13 @@ if uploaded_file:
         with st.spinner("Loading model and processing image..."):
             model = load_model()
             image_array = preprocess_image(image)
+
+            # Check if image is likely to be a real skin image
+            if not is_skin_like_image(image_array):
+                st.warning("❌ The uploaded image does not appear to be a valid skin lesion. Please upload a proper skin image.")
+                st.stop()
+
+            # Make prediction
             prediction = model.predict(image_array)
             predicted_class = int(np.argmax(prediction, axis=1)[0])
             confidence = float(np.max(prediction, axis=1)[0])
@@ -75,11 +87,16 @@ if uploaded_file:
         # Display result
         st.success("✅ Prediction Complete!")
         st.subheader("🔍 Result")
+
+        # Show low confidence warning
+        if confidence < 0.60:
+            st.warning("⚠️ The model is not very confident in this prediction. Please ensure the image clearly shows a skin lesion.")
+
         st.markdown(f"<b>Predicted Class:</b> {predicted_class} - <b>{predicted_label}</b>", unsafe_allow_html=True)
         st.markdown(f"<b>Confidence:</b> {confidence * 100:.2f}%", unsafe_allow_html=True)
         st.progress(confidence)
 
-        # Show all class probabilities
+        # Show full class probabilities
         st.subheader("📊 Class Probabilities")
         prob_df = pd.DataFrame(prediction[0], index=CLASS_NAMES.values(), columns=["Confidence"])
         st.bar_chart(prob_df)
@@ -89,5 +106,5 @@ if uploaded_file:
 else:
     st.info("Please upload an image file to begin classification.")
 
-# Footer .................
+# Footer
 st.markdown("<hr><center>Developed by <b>Md. Shihab Shorkar</b> | Powered by EfficientNetV2B0</center>", unsafe_allow_html=True)

@@ -6,8 +6,8 @@ import os
 import requests
 import pandas as pd
 
-# Set page configuration
-st.set_page_config(page_title="Skin Cancer Classifier", layout="centered")
+# Page config
+st.set_page_config(page_title="🧬 Skin Cancer Classifier", layout="centered")
 
 # Class labels
 CLASS_NAMES = {
@@ -19,92 +19,109 @@ CLASS_NAMES = {
     5: "Others"
 }
 
-# Model path and URL
+# Model paths
 MODEL_PATH = "model/EfficientNetV2B0_Light_Image_Split.h5"
 MODEL_URL = "https://github.com/mdShihabShorkarSuvo/skin-cancer-classifier/raw/main/model/EfficientNetV2B0_Light_Image_Split.h5"
 
-# Download the model if not available
+# Download model if missing
 def download_model(path):
     try:
-        with st.spinner("Downloading model..."):
+        with st.spinner("📥 Downloading model..."):
             r = requests.get(MODEL_URL)
             r.raise_for_status()
             os.makedirs(os.path.dirname(path), exist_ok=True)
             with open(path, "wb") as f:
                 f.write(r.content)
-        st.success("Model downloaded successfully!")
+        st.success("✅ Model downloaded!")
     except requests.exceptions.RequestException as e:
-        st.error(f"Error downloading model: {e}")
+        st.error(f"❌ Download error: {e}")
 
-# Load the model with caching
+# Load model with cache
 @st.cache_resource
 def load_model(path=MODEL_PATH):
     if not os.path.exists(path):
         download_model(path)
     return tf.keras.models.load_model(path)
 
-# Preprocess the uploaded image
+# Preprocess image
 def preprocess_image(image: Image.Image):
     image = image.resize((224, 224))
     img_array = np.array(image)
-    if img_array.shape[-1] == 4:  # Remove alpha channel if present
+    if img_array.shape[-1] == 4:  # Remove alpha
         img_array = img_array[..., :3]
     img_array = img_array / 255.0
     return np.expand_dims(img_array, axis=0)
 
-# Validate if the uploaded image looks like a real skin lesion
+# Validate image
 def is_skin_like_image(image_array):
-    std_dev = np.std(image_array)
-    return std_dev > 0.05  # Adjust threshold based on testing
+    return np.std(image_array) > 0.05
 
-# --- UI Layout ---
-st.markdown("<h1 style='text-align: center; color: #4CAF50;'>🧬 Skin Cancer Classification</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center;'>Upload a skin lesion image to classify the type of skin cancer.</p>", unsafe_allow_html=True)
+# Sidebar
+with st.sidebar:
+    st.markdown("## 📝 How to Use")
+    st.markdown("""
+    1. Upload a clear **skin lesion image** (JPG/PNG).
+    2. The model will detect the type of skin cancer.
+    3. View the predicted class, confidence, and a probability chart.
+    """)
+    st.markdown("---")
+    st.markdown("📌 **Note**: Low-confidence predictions may require better quality images.")
+
+# Header
+st.markdown("""
+    <div style='text-align:center; padding: 10px 0;'>
+        <h1 style='color:#4CAF50;'>🧬 Skin Cancer Classifier</h1>
+        <p>Upload a skin lesion image to classify the type of cancer using AI.</p>
+    </div>
+""", unsafe_allow_html=True)
 
 # Upload image
-uploaded_file = st.file_uploader("Upload a skin lesion image (JPG/PNG/GIF/BMP)", type=["jpg", "png", "gif", "bmp"])
+uploaded_file = st.file_uploader("📤 Upload Image", type=["jpg", "jpeg", "png", "bmp", "gif"])
 
 if uploaded_file:
     try:
         image = Image.open(uploaded_file).convert("RGB")
-        st.image(image, caption="Uploaded Image", use_column_width=True)
+        st.image(image, caption="🖼️ Uploaded Image", use_column_width=True)
 
-        with st.spinner("Loading model and processing image..."):
+        with st.spinner("🔍 Analyzing image..."):
             model = load_model()
             image_array = preprocess_image(image)
 
-            # Check if image is likely to be a real skin image
             if not is_skin_like_image(image_array):
-                st.warning("❌ The uploaded image does not appear to be a valid skin lesion. Please upload a proper skin image.")
+                st.warning("⚠️ This image doesn’t appear to be a skin lesion. Please upload a valid lesion photo.")
                 st.stop()
 
-            # Make prediction
             prediction = model.predict(image_array)
             predicted_class = int(np.argmax(prediction, axis=1)[0])
-            confidence = float(np.max(prediction, axis=1)[0])
+            confidence = float(np.max(prediction))
             predicted_label = CLASS_NAMES.get(predicted_class, "Unknown")
 
-        # Display result
-        st.success("✅ Prediction Complete!")
-        st.subheader("🔍 Result")
+        # Results card
+        st.markdown("""
+            <div style='background-color: #f0f8ff; padding: 20px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);'>
+                <h3 style='color:#4CAF50;'>🔍 Prediction Result</h3>
+                <p><b>Predicted Class:</b> <span style='color:#2c3e50;'>{} - {}</span></p>
+                <p><b>Confidence:</b> <span style='color:#2c3e50;'>{:.2f}%</span></p>
+            </div>
+        """.format(predicted_class, predicted_label, confidence * 100), unsafe_allow_html=True)
 
-        # Show low confidence warning
         if confidence < 0.60:
-            st.warning("⚠️ The model is not very confident in this prediction. Please ensure the image clearly shows a skin lesion.")
+            st.warning("⚠️ The model is not very confident. Try using a better-quality lesion image.")
 
-        st.markdown(f"<b>Predicted Class:</b> {predicted_class} - <b>{predicted_label}</b>", unsafe_allow_html=True)
-        st.markdown(f"<b>Confidence:</b> {confidence * 100:.2f}%", unsafe_allow_html=True)
-        st.progress(confidence)
-
-        # Show full class probabilities
-        st.subheader("📊 Class Probabilities")
+        # Probability chart
+        st.markdown("### 📊 Class Probability Chart")
         prob_df = pd.DataFrame(prediction[0], index=CLASS_NAMES.values(), columns=["Confidence"])
         st.bar_chart(prob_df)
 
     except Exception as e:
-        st.error(f"⚠️ Error processing image: {e}")
+        st.error(f"🚫 Error: {e}")
 else:
-    st.info("Please upload an image file to begin classification.")
+    st.info("📷 Please upload a skin lesion image to get started.")
 
 # Footer
-st.markdown("<hr><center>Developed by <b>Md. Shihab Shorkar</b> | Powered by EfficientNetV2B0</center>", unsafe_allow_html=True)
+st.markdown("""
+    <hr>
+    <div style='text-align:center'>
+        Developed by <b>Md. Shihab Shorkar</b> | Powered by <b>EfficientNetV2B0</b>
+    </div>
+""", unsafe_allow_html=True)
